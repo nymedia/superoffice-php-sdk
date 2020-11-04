@@ -6,6 +6,7 @@ use nymedia\SuperOffice\resources\Contact;
 use nymedia\SuperOffice\resources\Person;
 use nymedia\SuperOffice\resources\Project;
 use nymedia\SuperOffice\resources\ProjectMember;
+use Symfony\Component\HttpKernel\Exception\BadRequestHttpException;
 
 class Client {
 
@@ -20,6 +21,10 @@ class Client {
 
   protected $user;
 
+  protected $env;
+
+  protected $accessToken;
+
   public function getClient()
   {
     if (!$this->client) {
@@ -28,12 +33,39 @@ class Client {
     return $this->client;
   }
 
-  public function __construct($url, $user, $password, $client = null)
+  public function __construct($url, $user = null, $password = null, $client = null)
   {
     $this->url = $url;
     $this->client = $client;
     $this->user = $user;
     $this->password = $password;
+    $this->env = 'online';
+    if (strpos($this->url, 'sod.superoffice.com')) {
+      $this->env = 'sod';
+    }
+    if (strpos($this->url, 'qaonline.superoffice.com')) {
+      $this->env = 'qaonline';
+    }
+  }
+
+  public function getAccessToken($refresh_token, $client_id, $client_secret)
+  {
+    $url = sprintf('https://%s.superoffice.com/login/common/oauth/tokens?grant_type=refresh_token&client_id=%s&client_secret=%s&refresh_token=%s', $this->env, $client_id, $client_secret, $refresh_token);
+    $response = $this->client->post($url);
+    $data = (string) $response->getBody();
+    if (empty($data)) {
+      throw new BadRequestHttpException('No data in get access token response');
+    }
+    $json = @json_decode($data);
+    if (empty($json)) {
+      throw new BadRequestHttpException('Bad JSON in get access token response');
+    }
+    if (empty($json->access_token)) {
+      throw new BadRequestHttpException('The JSON in access token response did not contain an access token');
+    }
+    // Probably we want to use it directly after.
+    $this->accessToken = $json->access_token;
+    return $this->accessToken;
   }
 
   public function projectMember()
@@ -78,8 +110,16 @@ class Client {
         'User-Agent' => 'Superoffice PHP SDK (https://github.com/nymedia/superoffice-php-sdk)',
         'Accept' => 'application/json',
       ],
-      'auth' => [$this->user, $this->password],
     ];
+    if ($this->user && $this->password) {
+      $opts['auth'] = [
+        $this->user,
+        $this->password,
+      ];
+    }
+    if ($this->accessToken) {
+      $opts['headers']['Authorization'] = 'Bearer ' . $this->accessToken;
+    }
     if ($data && $method != 'GET') {
       // Set all needed options with this shorthand.
       $opts['json'] = $data;
