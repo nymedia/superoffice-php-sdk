@@ -13,6 +13,6 @@
         "psr-4": {"nymedia\\SuperOffice\\": "src"}
     },
     "require": {
-        "guzzlehttp/guzzle": "^6.3 || 7.0"
+        "guzzlehttp/guzzle": "^6.3 || ^7.0"
     }
 }
